@@ -19,34 +19,34 @@ class bme280 {
     this.FILTER_COEFF_8             = 0x03;
     this.FILTER_COEFF_16            = 0x04;
     
-    this.NO_OVERSAMPLING		        = 0x00;
-    this.OVERSAMPLING_1X		        = 0x01;
-    this.OVERSAMPLING_2X		        = 0x02;
-    this.OVERSAMPLING_4X		        = 0x03;
-    this.OVERSAMPLING_8X		        = 0x04;
-    this.OVERSAMPLING_16X		        = 0x05; 
+    this.NO_OVERSAMPLING            = 0x00;
+    this.OVERSAMPLING_1X            = 0x01;
+    this.OVERSAMPLING_2X            = 0x02;
+    this.OVERSAMPLING_4X            = 0x03;
+    this.OVERSAMPLING_8X            = 0x04;
+    this.OVERSAMPLING_16X           = 0x05; 
     
     this.STANDBY_TIME_1_MS          = 0x00;
     this.STANDBY_TIME_62_5_MS       = 0x01;
-    this.STANDBY_TIME_125_MS			  = 0x02;
+    this.STANDBY_TIME_125_MS        = 0x02;
     this.STANDBY_TIME_250_MS        = 0x03;
     this.STANDBY_TIME_500_MS        = 0x04;
     this.STANDBY_TIME_1000_MS       = 0x05;
     this.STANDBY_TIME_10_MS         = 0x06;
     this.STANDBY_TIME_20_MS         = 0x07; 
     
-    this.SLEEP_MODE		              = 0x00;
-    this.FORCED_MODE		            = 0x01;
+    this.SLEEP_MODE                 = 0x00;
+    this.FORCED_MODE                = 0x01;
     this.NORMAL_MODE                = 0x03;
     
-    this.PWR_CTRL_ADDR				      = 0xF4;
-    this.CONFIG_ADDR					      = 0xF5;
-    this.CTRL_MEAS_ADDR				      = 0xF4;
-    this.CTRL_HUM_ADDR				      = 0xF2;
+    this.PWR_CTRL_ADDR              = 0xF4;
+    this.CONFIG_ADDR                = 0xF5;
+    this.CTRL_MEAS_ADDR             = 0xF4;
+    this.CTRL_HUM_ADDR              = 0xF2;
     
-    this.TEMP_PRESS_CALIB_DATA_ADDR	= 0x88;
-    this.HUMIDITY_CALIB_DATA_ADDR		= 0xE1;    
-    this.DATA_ADDR					        = 0xF7;
+    this.TEMP_PRESS_CALIB_DATA_ADDR = 0x88;
+    this.HUMIDITY_CALIB_DATA_ADDR   = 0xE1;    
+    this.DATA_ADDR                  = 0xF7;
     
     this.calibration = new function() {
       this.T1 = 0;
