@@ -25,7 +25,7 @@ class bme280 {
     this.OVERSAMPLING_8X            = 0x04;
     this.OVERSAMPLING_16X           = 0x05;
 
-    this.STANDBY_TIME_1_MS          = 0x00;
+    this.STANDBY_TIME_0_5_MS        = 0x00;
     this.STANDBY_TIME_62_5_MS       = 0x01;
     this.STANDBY_TIME_125_MS        = 0x02;
     this.STANDBY_TIME_250_MS        = 0x03;
@@ -77,39 +77,11 @@ class bme280 {
       f: 0,
       sb: 0
     };
-
-    this.profiles = {
-        highAccuracy: {
-          mode: this.FORCED_MODE,
-           s_t: this.OVERSAMPLING_16X,
-           s_p: this.OVERSAMPLING_16X,
-           s_h: this.OVERSAMPLING_16X,
-             f: this.FILTER_COEFF_16,
-            sb: this.STANDBY_TIME_1000_MS
-        },
-        fastResponse: {
-          mode: this.NORMAL_MODE,
-           s_t: this.NO_OVERSAMPLING,
-           s_p: this.NO_OVERSAMPLING,
-           s_h: this.NO_OVERSAMPLING,
-             f: this.FILTER_COEFF_OFF,
-            sb: this.STANDBY_TIME_250_MS
-        },
-        lowPower: {
-          mode: this.FORCED_MODE,
-           s_t: this.NO_OVERSAMPLING,
-           s_p: this.NO_OVERSAMPLING,
-           s_h: this.NO_OVERSAMPLING,
-             f: this.FILTER_COEFF_OFF,
-            sb: this.STANDBY_TIME_1000_MS
-        },
-    };
-
   }
 
   getStandby() {
     switch(this.settings.sb) {
-      case this.STANDBY_TIME_1_MS:
+      case this.STANDBY_TIME_0_5_MS:
         return 1;
       case this.STANDBY_TIME_10_MS:
         return 10;
@@ -128,43 +100,27 @@ class bme280 {
     }
   }
 
-  init(config) {
-    if(!config)
-      config = this.profiles.highAccuracy;
-
-    return this._init(
-      typeof config.mode === 'undefined'? this.FORCED_MODE : config.mode,
-      typeof config.s_t  === 'undefined'? this.OVERSAMPLING_16X : config.s_t,
-      typeof config.s_p  === 'undefined'? this.OVERSAMPLING_16X : config.s_p,
-      typeof config.s_h  === 'undefined'? this.OVERSAMPLING_16X : config.S_h,
-      typeof config.f    === 'undefined'? this.FILTER_COEFF_16 : config.f,
-      typeof config.sb   === 'undefined'? this.STANDBY_TIME_1000_MS : config.sb
-    );
-  }
-
   _init(mode, s_t, s_p, s_h, f, sb) {
-    return new Promise((rs, rj) => {
-      if((s_t = s_t & 0x07) > 5) throw new Error('Invalid Temperate Oversamping');
-      if((s_p = s_p & 0x07) > 5) throw new Error('Invalid Pressure Oversamping');
-      if((s_h = s_h & 0x07) > 5) throw new Error('Invalid Humidity Oversamping');
-      if((f = f & 0x07) > 4) throw new Error('Invalid IIR Filter');
-      sb = sb & 0x07;
-      mode = mode & 0x03;
+    var config = {
+        mode : typeof mode === 'undefined'? this.NORMAL_MODE : +mode,
+        s_t  : typeof s_t  === 'undefined'? this.OVERSAMPLING_8X : +s_t,
+        s_p  : typeof s_p  === 'undefined'? this.OVERSAMPLING_8X : +s_p,
+        s_h  : typeof s_h  === 'undefined'? this.OVERSAMPLING_8X : +s_h,
+        f    : typeof f    === 'undefined'? this.FILTER_COEFF_OFF : +f,
+        sb   : typeof sb   === 'undefined'? this.STANDBY_TIME_125_MS : +sb
+      };
 
-      this.bus.readByte(this.ADDRESS, this.CHIP_ID_ADDR, (err, data) => {
-        if(err) return rj(err);
-        if(data != this.CHIP_ID) throw new Error('Cannot Find BME280');
-        this._reset().then(() => {
-          this._getCalibration().then(() => {
-            this._setSettings(mode, s_t, s_p, s_h, f, sb).then(() => {
-              if(mode != this.FORCED_MODE) return rs();
-              this.doForcedRead().then(() => rs()).catch((err) => rj(err));
-            }).catch((err) => rj(err));
-          }).catch((err) => rj(err));
-        }).catch((err) => rj(err));
-      });
-    });
+    if((config.s_t = config.s_t & 0x07) > 5) throw new Error('Invalid Temperate Oversamping');
+    if((config.s_p = config.s_p & 0x07) > 5) throw new Error('Invalid Pressure Oversamping');
+    if((config.s_h = config.s_h & 0x07) > 5) throw new Error('Invalid Humidity Oversamping');
+    if((config.f = config.f & 0x07) > 4) throw new Error('Invalid IIR Filter');
+    config.sb = config.sb & 0x07;
+    config.mode = config.mode & 0x03;
+
+    this.settings = config;
   }
+
+  init() { /* abstract */ }
 
   _calibrateHumidity(hum) {
     var var1 = this.calibration.fine - 76800;
@@ -231,7 +187,7 @@ class bme280 {
     return pressure;
   }
 
-  _readTemperatureCalibration(buffer) {
+  _temperatureCalibration(buffer) {
       this.calibration.T1 = this._uint16(buffer[1], buffer[0]);
       this.calibration.T2 = this._int16(buffer[3], buffer[2]);
       this.calibration.T3 = this._int16(buffer[5], buffer[4]);
@@ -247,7 +203,7 @@ class bme280 {
       this.calibration.H1 = buffer[25];
   }
 
-  _readHumidityCalibration(buffer) {
+  _humidityCalibration(buffer) {
       this.calibration.H2 = this._int16(buffer[1], buffer[0]);
       this.calibration.H3 = buffer[2];
       this.calibration.H4 = (buffer[3] << 4) | (buffer[4] & 0x0F);
@@ -256,18 +212,20 @@ class bme280 {
   }
 
   _int8(val) {
+    val &= 0x0F;
     return val > 127 ? (val - 256) : val;
   }
 
   _int16(msb, lsb) {
+    lsb &= 0x0F
     var val = (msb << 8) | lsb;
     return val > 32767 ? (val - 65536) : val;
   }
 
   _uint16(msb, lsb) {
+    lsb &= 0x0F;
     return (msb << 8) | lsb;
   }
-
 }
 
 module.exports = bme280;
