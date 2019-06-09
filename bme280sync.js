@@ -42,21 +42,7 @@ class bme280sync extends bme280 {
   getData() {
     var buffer = Buffer.allocUnsafe(8);
     this.bus.readI2cBlockSync(this.ADDRESS, this.DATA_ADDR, 8, buffer);
-
-    var temperature = (buffer[3] << 12) | (buffer[4] << 4) | (buffer[5] >>> 4);
-    temperature = this._calibrateTemperature(temperature);
-
-    var pressure = (buffer[0] << 12) | (buffer[1] << 4) | (buffer[2] >>> 4);
-    pressure = this._calibratePressure(pressure);
-
-    var humidity = (buffer[6] << 8) | buffer[7];
-    humidity = this._calibrateHumidity(humidity);
-
-    return {
-      temperature: (temperature * 9 / 5) + 32,
-      pressure: pressure * 0.0002952998751,
-      humidity: humidity
-    };
+    return this.parseData(buffer);
   }
 
   _getCalibration() {

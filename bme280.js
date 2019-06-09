@@ -5,6 +5,7 @@ class bme280 {
     this.i2c = require('i2c-bus');
     this.bus = this.i2c.openSync(busId || 1);
     this.ADDRESS = address || 0x76;
+    this.heatsoak = 4 * 5120;
 
     this.CHIP_ID_ADDR               = 0xD0;
     this.CHIP_ID                    = 0x60;
@@ -42,31 +43,32 @@ class bme280 {
     this.CONFIG_ADDR                = 0xF5;
     this.CTRL_MEAS_ADDR             = 0xF4;
     this.CTRL_HUM_ADDR              = 0xF2;
+    this.STATUS_ADDR                = 0xF3;
 
     this.TEMP_PRESS_CALIB_DATA_ADDR = 0x88;
     this.HUMIDITY_CALIB_DATA_ADDR   = 0xE1;
     this.DATA_ADDR                  = 0xF7;
 
-    this.calibration = new function() {
-      this.T1 = 0;
-      this.T2 = 0;
-      this.T3 = 0;
-      this.P1 = 0;
-      this.P2 = 0;
-      this.P3 = 0;
-      this.P4 = 0;
-      this.P5 = 0;
-      this.P6 = 0;
-      this.P7 = 0;
-      this.P8 = 0;
-      this.P9 = 0;
-      this.H1 = 0;
-      this.H2 = 0;
-      this.H3 = 0;
-      this.H4 = 0;
-      this.H5 = 0;
-      this.H6 = 0;
-      this.fine = 0;
+    this.calibration = {
+      T1 : 0,
+      T2 : 0,
+      T3 : 0,
+      P1 : 0,
+      P2 : 0,
+      P3 : 0,
+      P4 : 0,
+      P5 : 0,
+      P6 : 0,
+      P7 : 0,
+      P8 : 0,
+      P9 : 0,
+      H1 : 0,
+      H2 : 0,
+      H3 : 0,
+      H4 : 0,
+      H5 : 0,
+      H6 : 0,
+      fine : 0
     };
 
     this.settings = {
@@ -82,13 +84,13 @@ class bme280 {
   getStandby() {
     switch(this.settings.sb) {
       case this.STANDBY_TIME_0_5_MS:
-        return 1;
+        return 0.5;
       case this.STANDBY_TIME_10_MS:
         return 10;
       case this.STANDBY_TIME_20_MS:
         return 12;
       case this.STANDBY_TIME_62_5_MS:
-        return 63;
+        return 62.5;
       case this.STANDBY_TIME_125_MS:
         return 125;
       case this.STANDBY_TIME_250_MS:
@@ -102,12 +104,12 @@ class bme280 {
 
   _init(mode, s_t, s_p, s_h, f, sb) {
     var config = {
-        mode : typeof mode === 'undefined'? this.NORMAL_MODE : +mode,
-        s_t  : typeof s_t  === 'undefined'? this.OVERSAMPLING_8X : +s_t,
-        s_p  : typeof s_p  === 'undefined'? this.OVERSAMPLING_8X : +s_p,
-        s_h  : typeof s_h  === 'undefined'? this.OVERSAMPLING_8X : +s_h,
-        f    : typeof f    === 'undefined'? this.FILTER_COEFF_OFF : +f,
-        sb   : typeof sb   === 'undefined'? this.STANDBY_TIME_125_MS : +sb
+        mode : typeof mode === 'undefined'? this.FORCED_MODE : +mode,
+        s_t  : typeof s_t  === 'undefined'? this.OVERSAMPLING_16X : +s_t,
+        s_p  : typeof s_p  === 'undefined'? this.OVERSAMPLING_16X : +s_p,
+        s_h  : typeof s_h  === 'undefined'? this.OVERSAMPLING_16X : +s_h,
+        f    : typeof f    === 'undefined'? this.FILTER_COEFF_16 : +f,
+        sb   : typeof sb   === 'undefined'? this.STANDBY_TIME_1000_MS : +sb
       };
 
     if((config.s_t = config.s_t & 0x07) > 5) throw new Error('Invalid Temperate Oversamping');
@@ -143,12 +145,12 @@ class bme280 {
 
   _calibrateTemperature(temp) {
     var var1 = (temp / 16384) - (this.calibration.T1 / 1024);
-    var1 = var1 * this.calibration.T2;
+    var1 *= this.calibration.T2;
 
     var var2 = (temp / 131072) - (this.calibration.T1 / 8192);
-    var2 = var2 * var2 * this.calibration.T3;
+    var2 *= var2 * this.calibration.T3;
 
-    this.calibration.fine = var1 + var2;
+    this.calibration.fine = var1 + var2 - this.heatsoak;
     var temperature = this.calibration.fine / 5120;
 
     if (temperature < -40)
@@ -187,6 +189,23 @@ class bme280 {
     return pressure;
   }
 
+  parseData(buffer) {
+    var temperature = (buffer[3] << 12) | (buffer[4] << 4) | (buffer[5] >>> 4);
+    temperature = this._calibrateTemperature(temperature);
+
+    var pressure = (buffer[0] << 12) | (buffer[1] << 4) | (buffer[2] >>> 4);
+    pressure = this._calibratePressure(pressure);
+
+    var humidity = (buffer[6] << 8) | buffer[7];
+    humidity = this._calibrateHumidity(humidity);
+
+    return {
+      temperature: (temperature * 9 / 5) + 32,
+      pressure: pressure * 0.0002952998751,
+      humidity: humidity
+    };
+  }
+
   _temperatureCalibration(buffer) {
       this.calibration.T1 = this._uint16(buffer[1], buffer[0]);
       this.calibration.T2 = this._int16(buffer[3], buffer[2]);
@@ -212,18 +231,15 @@ class bme280 {
   }
 
   _int8(val) {
-    val &= 0x0F;
     return val > 127 ? (val - 256) : val;
   }
 
   _int16(msb, lsb) {
-    lsb &= 0x0F
     var val = (msb << 8) | lsb;
     return val > 32767 ? (val - 65536) : val;
   }
 
   _uint16(msb, lsb) {
-    lsb &= 0x0F;
     return (msb << 8) | lsb;
   }
 }
